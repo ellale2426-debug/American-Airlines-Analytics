@@ -29,4 +29,6 @@ WHERE operational_area NOT IN (
 )
 OR operational_area IS NULL;
 
-
+Conflicting duplicate resolution: Two records shared the same business key but reported different passenger counts. 
+    Since the correct value could not be independently verified, the analysis dataset retains the record with the lower operation ID as a documented simulation assumption. 
+    The original records remain unchanged in the source table.
