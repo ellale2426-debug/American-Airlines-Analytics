@@ -1,0 +1,95 @@
+
+CREATE OR REPLACE VIEW public.airport_operations_analysis AS
+WITH operation_conflicts AS (
+    SELECT
+        operation_date,
+        hour_of_day,
+        airport_code,
+        operational_area,
+        COUNT(*) AS records_at_key
+    FROM public."Operation_Clean"
+    GROUP BY
+        operation_date,
+        hour_of_day,
+        airport_code,
+        operational_area
+),
+operation_dedup AS (
+    SELECT DISTINCT ON (
+        o.operation_date,
+        o.hour_of_day,
+        o.airport_code,
+        o.operational_area
+    )
+        o.*
+    FROM public."Operation_Clean" o
+    ORDER BY
+        o.operation_date,
+        o.hour_of_day,
+        o.airport_code,
+        o.operational_area,
+        o.operation_id
+)
+SELECT
+    o.operation_date,
+    o.hour_of_day,
+    o.airport_code,
+    o.operational_area,
+
+    o.scheduled_flights,
+    o.passengers_processed,
+    o.bags_processed,
+    o.average_service_time_minutes,
+    o.delayed_flights,
+    o.cancelled_flights,
+    o.operational_disruptions,
+
+    s.scheduled_staff,
+    s.available_staff,
+    s.overtime_hours AS staffing_overtime_hours,
+    s.hourly_labor_cost_usd,
+
+    a.target_coverage_rate,
+    a.target_service_time_minutes,
+    a.minimum_staff,
+    a.target_overtime_rate,
+
+    s.scheduled_staff - s.available_staff
+        AS staffing_gap,
+
+    ROUND(
+        s.available_staff::numeric
+        / NULLIF(s.scheduled_staff, 0),
+        4
+    ) AS staffing_coverage_rate,
+
+    ROUND(
+        o.delayed_flights::numeric
+        / NULLIF(o.scheduled_flights, 0),
+        4
+    ) AS flight_delay_rate,
+
+    ROUND(
+        o.passengers_processed::numeric
+        / NULLIF(s.available_staff, 0),
+        2
+    ) AS passengers_per_available_staff,
+
+    CASE
+        WHEN c.records_at_key > 1 THEN 'Review required'
+        ELSE 'OK'
+    END AS data_quality_status
+
+FROM operation_dedup o
+LEFT JOIN public."Staffing_Clean" s
+    ON o.operation_date = s.operation_date
+    AND o.hour_of_day = s.hour_of_day
+    AND o.airport_code = s.airport_code
+    AND o.operational_area = s.operational_area
+LEFT JOIN public."Area" a
+    ON o.operational_area = a.operational_area
+LEFT JOIN operation_conflicts c
+    ON o.operation_date = c.operation_date
+    AND o.hour_of_day = c.hour_of_day
+    AND o.airport_code = c.airport_code
+    AND o.operational_area = c.operational_area;
